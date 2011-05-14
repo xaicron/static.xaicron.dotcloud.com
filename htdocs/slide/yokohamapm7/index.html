@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Yokohama.pm #7 xaicron</title>
+<style>
+/* reset styles */
+body, div, dl, dt, dd, h1, h2, h3, h4, h5, h6, pre, form, fieldset, input, textarea, p, blockquote, th, td, article { 
+    margin:0;
+    padding:0;
+}
+
+body {
+    background-color: #000;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow:hidden;
+}
+
+body > section {
+    position: absolute;
+    top: 5%;
+    bottom: 5%;
+    left: 5%;
+    background: #333;
+    color: #fff;
+    text-shadow: rgba(0,0,0,0.1) 2px 2px;
+    letter-spacing: 0.15em;
+    padding: 1%;
+    height:0%;
+    overflow: auto;
+    width: 88%;
+    border-radius: 20px;
+    opacity: 0;
+}
+
+h1, h2, h3 {
+    text-shadow: 1px 1px 1px #000;
+}
+
+h1 {
+    font-size: 150%;
+}
+
+h2 {
+    font-size: 120%;
+}
+
+h3 {
+    font-size: 100%;
+}
+
+p {
+    margin: 1em;
+    font-size: 80%;
+}
+
+ul {
+    list-style-type: disc;
+    font-size: 80%;
+}
+
+ol {
+    list-style-type: decimal;
+    font-size: 80%;
+}
+
+.next {
+    top: -100%;
+    height:88%;
+    -moz-transition: all 0.5s ease-in-out;
+    -webkit-transition: all 0.5s ease-in-out;
+    -o-transition: all 0.5s ease-in-out;
+    -ms-transition: all 0.5s ease-in-out;
+    transition: all 0.5s ease-in-out;
+}
+.prev {
+    bottom: -100%;
+    height:88%;
+    -moz-transition: all 0.5s ease-in-out;
+    -webkit-transition: all 0.5s ease-in-out;
+    -o-transition: all 0.5s ease-in-out;
+    -ms-transition: all 0.5s ease-in-out;
+    transition: all 0.5s ease-in-out;
+}
+.view {
+    height:88%;
+    opacity:1;
+    -moz-transition: all 0.5s ease-in-out;
+    -webkit-transition: all 0.5s ease-in-out;
+    -o-transition: all 0.5s ease-in-out;
+    -ms-transition: all 0.5s ease-in-out;
+    transition: all 0.5s ease-in-out;
+}
+
+a {
+    text-decoration: none;
+}
+a:link {
+    color: #0f0;
+}
+a:visited  {
+    color: #0f0;
+}
+
+pre {
+    margin: 1em;
+    padding: 0.3em;
+    font-size: 80%;
+    border: 1px solid #fff;
+    color: #000;
+    background-color: #fff;
+}
+
+/* pretty */
+.str{color:#080}.kwd{color:#008}.com{color:#800}.typ{color:#606}.lit{color:#066}.pun{color:#660}.pln{color:#000}.tag{color:#008}.atn{color:#606}.atv{color:#080}.dec{color:#606}pre.prettyprint{padding:2px;border:1px solid #888}ol.linenums{margin-top:0;margin-bottom:0}li.L0,li.L1,li.L2,li.L3,li.L5,li.L6,li.L7,li.L8{list-style:none}li.L1,li.L3,li.L5,li.L7,li.L9{background:#eee}@media print{.str{color:#060}.kwd{color:#006;font-weight:bold}.com{color:#600;font-style:italic}.typ{color:#404;font-weight:bold}.lit{color:#044}.pun{color:#440}.pln{color:#000}.tag{color:#006;font-weight:bold}.atn{color:#404}.atv{color:#060}}
+</style>
+</head>
+<body>
+
+<section>
+
+<h1 id="5%C3%A5%C2%88%C2%86%C3%A3%C2%81%C2%A7%C3%A5%C2%A7%C2%8B%C3%A3%C2%82%C2%81%C3%A3%C2%82%C2%8B%20dotcloud">5分で始める dotcloud</h1>
+
+<pre>
+xaicron
+Yokohama.pm #7 (2011-05-13)
+</pre>
+
+</section>
+
+<section>
+
+<h1 id="Agenda">Agenda</h1>
+
+<ul>
+<li>dotcloud ってなに</li>
+<li>dotcloud を始めよう</li>
+<li>dotcloud で NoPaste</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1 id="dotcloud">dotcloud</h1>
+
+<ul>
+<li>GAE みたいな クラウドサービス</li>
+<li>dotcloud コマンドで簡単にサービス立ち上げられる</li>
+<ul>
+<li>python</li>
+</ul>
+<li>まだβなので、無料</li>
+<ul>
+<li>今すぐ登録しましょう</li>
+</ul>
+</ul>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%81%C2%93%C3%A3%C2%82%C2%8C%C3%A3%C2%81%C2%BE%C3%A3%C2%81%C2%A7%C3%A3%C2%81%C2%AE%C3%A3%C2%81%C2%82%C3%A3%C2%82%C2%89%C3%A3%C2%81%C2%BE%C3%A3%C2%81%C2%97">これまでのあらまし</h1>
+
+<ul>
+<li>dotcloud で plack 動くようになったらしい</li>
+<li>miyagawa さんが dotcloud に行ったらしい</li>
+<li>なんか遊ぼうぜ</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%81%C2%A4%C3%A3%C2%81%C2%BE%C3%A3%C2%82%C2%8A">つまり</h1>
+
+<p>
+<img src="img/01.png" />
+</p>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%81%C2%93%C3%A3%C2%81%C2%86%C3%A3%C2%81%C2%84%C3%A3%C2%81%C2%86%C3%A3%C2%81%C2%93%C3%A3%C2%81%C2%A8%C3%A3%C2%81%C2%A7%C3%A3%C2%81%C2%99%C3%A3%C2%81%C2%AD">こういうことですね</h1>
+
+<p>
+<img src="img/02.png" />
+</p>
+
+<p>
+miyagawa さんが使えるようになりました
+</p>
+
+</section>
+
+<section>
+
+<h1 id="dotcloud%20%C3%A3%C2%81%C2%AE%C3%A5%C2%A7%C2%8B%C3%A3%C2%82%C2%81%C3%A6%C2%96%C2%B9">dotcloud の始め方</h1>
+
+<pre>
+$ easy_install dotcloud
+$ dotcloud create nekokak
+$ dotcloud deploy --type perl nekokak.www
+</pre>
+
+<p>
+とかやるといろいろあって、おもちゃ箱ができる。
+<br />かんたんですね。
+</p>
+
+</section>
+
+<section>
+
+<h1 id="dotcloud%20%C3%A3%C2%81%C2%AE%C3%A4%C2%BD%C2%BF%C3%A3%C2%81%C2%84%C3%A6%C2%96%C2%B9">dotcloud の使い方</h1>
+
+<p>
+詳しくはログイン後のチートシートを読んでね♡
+</p>
+
+</section>
+
+<section>
+
+<h1 id="dotcloud%20%C3%A3%C2%81%C2%A7%20NoPaste">dotcloud で NoPaste</h1>
+
+<p>
+とりあえず簡単なので NoPaste 的なアプリを動かしてみる
+</p>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%82%C2%BD%C3%A3%C2%83%C2%BC%C3%A3%C2%82%C2%B9">ソース</h1>
+
+<pre>
+use strict;
+use warnings;
+use Plack::Request;
+use Plack::Response;
+use Text::Xslate;
+use DBIx::Connector;
+use Router::Simple;
+use Encode qw(decode_utf8 encode_utf8);
+
+my $router = Router::Simple-&gt;new;
+$router-&gt;connect(&#39;/&#39;, {action =&gt; &#39;index&#39;});
+$router-&gt;connect(&#39;/create&#39;, {action =&gt; &#39;create&#39;}, {method =&gt; &#39;POST&#39;});
+$router-&gt;connect(&#39;/{id:[1-9]\d*}&#39;, {action =&gt; &#39;content&#39;});
+
+my $conn = DBIx::Connector-&gt;new(&#39;dbi:SQLite:nopaste.db&#39;, &#39;&#39;, &#39;&#39;, {
+    RaiseError     =&gt; 1,
+    AutoCommit     =&gt; 1,
+    PrintWarn      =&gt; 0,
+    PrintError     =&gt; 0,
+    sqlite_unicode =&gt; 1,
+}) or die $DBI::errstr;
+
+my $xslate = Text::Xslate-&gt;new(
+    path   =&gt; [&#39;tmpl&#39;],
+    syntax =&gt; &#39;TTerse&#39;,
+);
+
+sub {
+    my ($found) = $conn-&gt;run(sub {
+        shift-&gt;selectrow_array(
+            &#39;SELECT COUNT(tbl_name) FROM sqlite_master WHERE tbl_name = ?&#39;,
+            undef,
+            &#39;paste&#39;,
+        );
+    });
+
+    return if $found;
+
+    $conn-&gt;txn(sub {
+        my $dbh = shift;
+        $dbh-&gt;do(&lt;&lt; &#39;SQL&#39;);
+CREATE TABLE paste (
+    id INTEGER PRIMARY KEY,
+    title TEXT,
+    content TEXT NOT NULL,
+    created_on INTEGER
+)
+SQL
+        $dbh-&gt;commit;
+    });
+}-&gt;();
+
+sub render {
+    my ($file, $args) = @_;
+    my $html = encode_utf8 $xslate-&gt;render($file, $args);
+
+    return [200, [
+        &#39;Content-Type&#39;   =&gt; &#39;text/html; chatset=utf8&#39;,
+        &#39;Content-Length&#39; =&gt; length($html),
+    ], [$html]]; 
+}
+
+sub make_permalink {
+    my ($req, $id) = @_;
+    my $uri = $req-&gt;base;
+    $uri-&gt;path($id);
+    $uri-&gt;as_string;
+}
+
+sub {
+    my $env = shift;
+    my $req = Plack::Request-&gt;new($env);
+    if (my $p = $router-&gt;match($env)) {
+        if ($p-&gt;{action} eq &#39;index&#39;) {
+            return render(&#39;index.xt&#39;);
+        }
+        elsif ($p-&gt;{action} eq &#39;content&#39;) {
+            my $id = $p-&gt;{id};
+            my $row = $conn-&gt;run(sub {
+                my $dbh = shift;
+                $dbh-&gt;selectrow_hashref(
+                    &#39;SELECT * FROM paste WHERE id = ?&#39;,
+                    undef,
+                    $id,
+                );
+            });
+
+            return [404, [], [&#39;Not Found&#39;]] unless $row;
+            return render(&#39;content.xt&#39;, {
+                %$row,
+                link =&gt; make_permalink($req, $id),
+            });
+        }
+        elsif ($p-&gt;{action} eq &#39;create&#39;) {
+            my $title = decode_utf8 $req-&gt;param(&#39;title&#39;);
+            my $content = decode_utf8 $req-&gt;param(&#39;content&#39;);
+
+            unless (length $content) {
+                return [400, [], [&#39;Bad Request&#39;]];
+            }
+
+            my ($id) = $conn-&gt;txn(sub {
+                my $dbh = shift;
+                $dbh-&gt;do(
+                    &#39;INSERT INTO paste(title, content, created_on) VALUES(?, ?, ?)&#39;,
+                    undef,
+                    ($title, $content, time),
+                );
+                $dbh-&gt;commit;
+                $dbh-&gt;sqlite_last_insert_rowid;
+            });
+
+            return render(&#39;content.xt&#39;, {
+                title   =&gt; $title,
+                content =&gt; $content,
+                id      =&gt; $id,
+                link    =&gt; make_permalink($req, $id),
+            });
+        }
+    }
+    else {
+        return [404, [], [&#39;Not Found&#39;]];
+    }
+};
+
+</pre>
+
+<p>
+簡単ですね。
+</p>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%83%C2%87%C3%A3%C2%82%C2%A3%C3%A3%C2%83%C2%AC%C3%A3%C2%82%C2%AF%C3%A3%C2%83%C2%88%C3%A3%C2%83%C2%AA%C3%A6%C2%A7%C2%8B%C3%A6%C2%88%C2%90">ディレクトリ構成</h1>
+
+<pre>
+.
+├── Changes
+├── MANIFEST.SKIP
+├── META.yml
+├── Makefile
+├── Makefile.PL
+├── README
+├── app.psgi
+├── inc
+│   └── Module
+│       ├── Install
+│       │   ├── AuthorTests.pm
+│       │   ├── Base.pm
+│       │   ├── Can.pm
+│       │   ├── Fetch.pm
+│       │   ├── Makefile.pm
+│       │   ├── Metadata.pm
+│       │   ├── Repository.pm
+│       │   ├── Win32.pm
+│       │   └── WriteAll.pm
+│       └── Install.pm
+├── lib
+│   └── nopaste.pm
+├── t
+│   └── 00_compile.t
+├── tmpl
+│   ├── content.xt
+│   └── index.xt
+└── xt
+    ├── 01_podspell.t
+    ├── 02_pod.t
+    ├── 03_pod-coverage.t
+    ├── 04_perlcritic.t
+    ├── 05_script-shebang.t
+    └── perlcriticrc
+</pre>
+
+</section>
+
+<section>
+
+<h1 id="git%20%C3%A3%C2%81%C2%A7%C3%A7%C2%AE%C2%A1%C3%A7%C2%90%C2%86%C3%A3%C2%81%C2%97%C3%A3%C2%81%C2%BE%C3%A3%C2%81%C2%97%C3%A3%C2%82%C2%87%C3%A3%C2%81%C2%86">git で管理しましょう</h1>
+
+<p>
+さっきのような構成を *全部* git に commit 
+</p>
+
+<pre>
+$ dotcloud push xaicron.paste {path}
+</pre>
+
+<p>
+とかやると魔法が起きてアプリがうごく！！！
+</p>
+
+<p>
+<a href="http://paste.xaicron.dotcloud.com/">http://paste.xaicron.dotcloud.com/</a>
+</p>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A4%C2%BE%C2%9D%C3%A5%C2%AD%C2%98%C3%A3%C2%83%C2%A2%C3%A3%C2%82%C2%B8%C3%A3%C2%83%C2%A5%C3%A3%C2%83%C2%BC%C3%A3%C2%83%C2%AB%C3%A3%C2%81%C2%AE%C3%A8%C2%A7%C2%A3%C3%A6%C2%B1%C2%BA">依存モジュールの解決</h1>
+
+<p>
+依存モジュールは Makefile.PL に書いとくとよしなにしてくれる。超らくちん。
+</p>
+
+<pre>
+use inc::Module::Install;
+name &#39;nopaste&#39;;
+all_from &#39;lib/nopaste.pm&#39;;
+
+requires &#39;Plack&#39;;
+requires &#39;DBD::SQLite&#39;;
+requires &#39;DBIx::Connector&#39;;
+requires &#39;Text::Xslate&#39;;
+requires &#39;Encode&#39;;
+requires &#39;Router::Simple&#39;;
+
+test_requires &#39;Test::More&#39;, 0.98;
+
+tests join q{ }, map { sprintf &#39;t%s.t&#39;, &#39;/*&#39; x $_ } 1..3;
+author_tests &#39;xt&#39;;
+
+WriteAll;
+</pre>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A4%C2%BE%C2%9D%C3%A5%C2%AD%C2%98%C3%A3%C2%83%C2%A2%C3%A3%C2%82%C2%B8%C3%A3%C2%83%C2%A5%C3%A3%C2%83%C2%BC%C3%A3%C2%83%C2%AB%C3%A3%C2%81%C2%AE%C3%A8%C2%A7%C2%A3%C3%A6%C2%B1%C2%BA">依存モジュールの解決</h1>
+
+<p>
+注意点としては Module::Install 使ってる場合は inc も commit すること。
+</p>
+
+<pre>
+$ git add -f inc
+$ git commit -m &#39;added inc&#39;
+</pre>
+
+<p>
+忘れるとよよよ。
+</p>
+
+</section>
+
+<section>
+
+<h1 id="dotcloud%20%C3%A3%C2%81%C2%84%C3%A3%C2%81%C2%84%C3%A3%C2%81%C2%A7%C3%A3%C2%81%C2%99%C3%A3%C2%81%C2%AD">dotcloud いいですね</h1>
+
+<p>
+とっても簡単に PSGI アプリを動かせて便利ですね！
+</p>
+
+<p>
+みんなも使いましょう！
+</p>
+
+</section>
+
+<section>
+
+<h1 id="%C3%A3%C2%81%C2%8A%C3%A3%C2%81%C2%97%C3%A3%C2%81%C2%BE%C3%A3%C2%81%C2%84">おしまい</h1>
+
+<p>
+ご清聴ありがとうございました。
+</p>
+
+</section>
+
+
+
+<script type="text/javascript" src="http://google-code-prettify.googlecode.com/svn/trunk/src/prettify.js"></script>
+<script type="text/javascript">(function() {
+    if (typeof prettyPrint === 'function') {
+        var pre = document.getElementsByTagName('pre');
+        for (var n = pre.length; n --> 0;) {
+            pre[n].className = (pre[n].className || '').split(/[ \t\r\n]+/).concat('prettyprint').join(' ')
+        }
+        prettyPrint();
+    }
+})();
+</script>
+
+<script type="text/javascript">
+//(function() {
+
+var width = 0;
+var timmer = setInterval(function(){
+    if (width != document.documentElement.clientWidth) {
+        width = document.documentElement.clientWidth;
+        document.body.style.fontSize = width / 5 + '%';
+    }
+}, 100);
+
+var slides = [];
+var NC = 'next';
+var PC = 'prev';
+var VC = 'view';
+var articles = document.querySelectorAll('body > section');
+for (var i = 0, l = articles.length; i < l; i++) {
+    var section = articles[i];
+    var name = section.className || '';
+    addClass(section, NC);
+    slides.push(section);
+}
+
+var current = 0;
+var count = slides.length;
+
+var KEYBORD = {
+    Left  : 37,
+    Right : 39,
+    H     : 72,
+    J     : 74,
+    K     : 75,
+    L     : 76,
+};
+document.onkeydown = function(e) {
+    if (!e) {
+        e = window.event;
+    }
+    var key = e.keyCode;
+    if ((key === KEYBORD.J || key === KEYBORD.Right) && slides[current+1]) {
+        next();
+        return false;
+    }
+    else if ((key === KEYBORD.K || key === KEYBORD.Left) && slides[current-1]) {
+        prev();
+        return false;
+    }
+}
+
+setTimeout(function(){
+    var matched;
+    if (matched = location.hash.match(/^#p(\d+)$/)){
+        current = +matched[1];
+        for (var i = 0; i < current && slides[i]; i++){
+            replaceClass(slides[i], [NC, VC], PC);
+        }
+        replaceClass(slides[current], [PC, NC], VC);
+    }
+    else {
+        replaceClass(slides[0], [PC, NC], VC);
+    }
+}, 500);
+
+/* utility functions */
+function next() {
+    replaceClass(slides[current++], [NC, VC], PC);
+    replaceClass(slides[current], [PC, NC], VC);
+    location.hash = 'p' + current;
+}
+function prev() {
+    replaceClass(slides[current--], [PC, VC], NC);
+    replaceClass(slides[current], [PC, NC], VC);
+    location.hash = 'p' + current;
+}
+
+function removeClass(elem, targets) {
+    if (!typeof targets === "object") { // non-array
+        targets = [targets];
+    }
+    var targetMap = {};
+    for (var i = 0, l = targets.length; i < l; i++) {
+        targetMap[targets[i]] = 1;
+    }
+
+    var classes = elem.className.split(/ /);
+    var result = [];
+    for (var i = 0, l = classes.length; i < l; i++) {
+        var name = classes[i];
+        if (!targetMap[name]) {
+            result.push(name);
+        }
+    }
+    elem.className = result.join(' ');
+}
+function addClass(elem, target) {
+    elem.className += ' ' + target;
+}
+function replaceClass(elem, from, to) {
+    removeClass(elem, from);
+    addClass(elem, to);
+}
+//})();
+</script>
+
+</body>
+<html>
