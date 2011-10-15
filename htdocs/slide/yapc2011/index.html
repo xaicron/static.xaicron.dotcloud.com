@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Cache Maniacs (YAPC::Asia 2011 - xaicron)</title>
+<link rel="stylesheet" href="static/css/style.css" />
+<link rel="stylesheet" href="static/css/pretty.css" />
+</head>
+<body>
+
+<section class="center">
+
+<!-- raw html start -->
+<div style="position: relative; top: 20%;">
+<!-- raw html end -->
+
+<h1>大規模環境における<br /><span style="color: red">マニアック</span>なキャッシュ利用術</h1>
+
+<p>
+YAPC::Asia 2011 - 2011/10/15
+<br />Yuji Shimada (<span style="color: red">xaicron</span>)
+</p>
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+
+</section>
+
+<section>
+
+<h1>自己紹介</h1>
+
+<ul>
+<li>嶋田 裕二 (Yuji Shimada)</li>
+<li>@xaicron</li>
+<li>ソフトウェアエンジニア</li>
+<li>CPAN Author</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>仕事</h1>
+
+<ul>
+<li>DeNA</li>
+<li>Mobage オープンプラットフォーム</li>
+<ul>
+<li>Mobage API</li>
+<li>Gadget Server</li>
+</ul>
+</ul>
+
+</section>
+
+<section>
+
+<h1>CPAN Modules</h1>
+
+<ul>
+<li>App::pmuninstall</li>
+<li>IO::Prompt::Simple</li>
+<li>WWW::YouTube::Download</li>
+<li>Win32::Unicode</li>
+</ul>
+
+<p>
+etc...
+</p>
+</section>
+
+<section>
+
+<p>
+あと、gihyo.jp に 「高速なWeb APIの実装とテスト―Mobage APIを支えるノウハウ」という記事が上がっているので、興味があったら見てみてください！
+</p>
+<p>
+<a href="http://gihyo.jp/dev/serial/01/perl-hackers-hub/000901">http://gihyo.jp/dev/serial/01/perl-hackers-hub/000901</a>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>はい</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>はじめに</h1>
+
+<p>
+Mobage オープンプラットフォームではここ半年ぐらいで、トラフィックが以前よりふえて、負荷が高まって来ました。
+</p>
+</section>
+
+<section>
+
+<h1>はじめに</h1>
+
+<p>
+そこで、負荷を軽減するために、いろんな所にキャッシュを使うことにしました。
+</p>
+</section>
+
+<section>
+
+<h1>はじめに</h1>
+
+<p>
+どういう問題が起きて、どのようにキャッシュを利用することで解決したのか。
+</p>
+<p>
+というような話を漫然とします。
+</p>
+</section>
+
+<section>
+
+<h1>はじめに</h1>
+
+<p>
+キャッシュと一口に言ってもいろいろありますが、基本的には Mobage では memcached を幅広く利用しているので
+<br />そのへんの話が主になります。
+</p>
+</section>
+
+<section>
+
+<h1>はじめに</h1>
+
+<p>
+基本的に<del>イケてない</del>泥臭い話がメインになります
+</p>
+</section>
+
+<section>
+
+<h1>Agenda</h1>
+
+<ul>
+<li>第一部</li>
+<ul>
+<li>あれ、私のキャッシュ更新されてない...？</li>
+<li>キャッシュを worker で作成する</li>
+</ul>
+<li>第二部</li>
+<ul>
+<li>memcached へのトラフィックを削減する</li>
+<li>DNS をキャシュする</li>
+</ul>
+<li>おまけ</li>
+</ul>
+
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>第一部</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>あれ、私のキャッシュ<br /><span style="color: red">更新されてない</span>...？</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+みなさん、Cache::Memcached::Fast の set とか delete の戻り値見てますか？
+</p>
+</section>
+
+<section>
+
+<p>
+POD には
+</p>
+<p>
+<code>Return: boolean, true for positive server reply, false for negative server reply, or undef in case of some error.</code>
+</p>
+<p>
+とか書かれてますね。
+</p>
+</section>
+
+<section>
+
+<p>
+つまり、set とか delete がよくわからん理由で失敗すると、undef が返ってくるんですよ！
+</p>
+</section>
+
+<section>
+
+<h1>実は出来てないキャッシュの更新</h1>
+
+<ul>
+<li>set とか delete で undef が返ってくる場合の原因のほとんどは、ネットワーク</li>
+<li>ネットワークの状況によってはコネクションを貼るのに時間がかかる</li>
+<li>TCP のハンドシェイクに失敗すると3秒待たされる (Linux)</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>実は出来てないキャッシュの更新</h1>
+
+<ul>
+<li>set とか delete で undef が返ってくる場合の原因のほとんどは、ネットワーク</li>
+<li>ネットワークの状況によってはコネクションを貼るのに時間がかかる</li>
+<li>TCP のハンドシェイクに失敗すると3秒待たされる (Linux)</li>
+</ul>
+
+<p>
+<strong><span style="color: red">キャッシュ更新するのに3秒待つとか悲しい</span></strong>
+<br />(しかも更新されてない)
+</p>
+</section>
+
+<section>
+
+<p>
+Cache::Memcached::Fast のデフォルトの timeout
+</p>
+<table>
+<tr>
+<th> オプション</th>
+<th> 時間</th>
+<th> 説明</th>
+</tr>
+<tr>
+<td>connect_timeout</td>
+<td>250ms</td>
+<td>コネクションを貼る時間</td>
+</tr>
+<tr>
+<td>io_timeout</td>
+<td>100ms</td>
+<td>データを取ってくる時間</td>
+</tr>
+</table>
+</section>
+
+<section>
+
+<p>
+Cache::Memcached::Fast のデフォルトの timeout
+</p>
+<table>
+<tr>
+<th> オプション</th>
+<th> 時間</th>
+<th> 説明</th>
+</tr>
+<tr>
+<td>connect_timeout</td>
+<td>250ms</td>
+<td>コネクションを貼る時間</td>
+</tr>
+<tr>
+<td>io_timeout</td>
+<td>100ms</td>
+<td>データを取ってくる時間</td>
+</tr>
+</table>
+<ul>
+<li>Cache::Memcached::Fast を使っていれば 3秒待たされることはない。やった！</li>
+<li>ただし、このいずれかの時間を越えると set ミスなどが発生</li>
+</ul>
+
+</section>
+
+<section class="center">
+
+<h1>connect_timeout に対する対策</h1>
+
+</section>
+
+<section class="center">
+
+<h1>connect_timeout に対する対策</h1>
+
+<!-- raw html start -->
+<div style="position: relative; top: 20%">
+<p style="font-size: 150%; color: red"><strong>永続接続をする</strong></p>
+</div>
+<!-- raw html end -->
+
+</section>
+
+<section class="center">
+
+<h1>connect_timeout に対する対策</h1>
+
+<!-- raw html start -->
+<div style="position: relative; top: 10%">
+<p style="font-size: 250%; color: red"><strong>永続接続をする</strong></p>
+</div>
+<!-- raw html end -->
+
+</section>
+
+<section>
+
+<p>
+大事なことなので2回言いました
+</p>
+</section>
+
+<section>
+
+<p>
+<del>永続接続したいなぁ</del>
+</p>
+</section>
+
+<section>
+
+<p>
+ちなみに、io_timeout は超大量のデータをとってきたりすると発生するかもしれません。
+</p>
+</section>
+
+<section>
+
+<h1>永続接続とはいえ</h1>
+
+<ul>
+<li>何かしらの理由で接続が切れることはある</li>
+<li>再接続に失敗した場合、更新が失敗する</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>永続接続とはいえ</h1>
+
+<ul>
+<li>何かしらの理由で接続が切れることはある</li>
+<li>再接続に失敗した場合、更新が失敗する</li>
+</ul>
+
+<p>
+なんだか悲しいですね。
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>そこで<span style="color: red">リトライ</span>ですよ！</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>リトライをする</h1>
+
+<ul>
+<li>set や delete などの更新系のメソッドは server error 的なときに、undef が返る</li>
+<li>つまり、undef の時にリトライしてやればいい</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>リトライをする</h1>
+
+<p>
+大体こんな感じ
+</p>
+<pre>
+package MyApp::Cache::Memcached;
+
+use strict;
+use warnings;
+use Sub::Retry 0.03 qw(retry);
+use parent &#39;Cache::Memcached::Fast&#39;;
+
+our $MAX_RETRY      = 3;
+our $RETRY_INTERVAL = 0.05;
+
+for my $method (qw(set delete)) {
+    no strict &#39;refs&#39;;
+    *$method = sub {
+        use strict &#39;refs&#39;;
+        my $self = shift;
+        # 失敗したら50ms待ち、3回までリトライする
+        my $ret  = retry $MAX_RETRY, $RETRY_INTERVAL, sub {
+            $self-&gt;SUPER::$method(@_);
+        }, sub {
+            my $ret = shift;
+            defined $ret ? 0 : 1;
+        };
+        return $ret;
+    };
+}
+
+1;
+</pre>
+
+<p>
+必要に応じて、add や incr などを追加すればいいでしょう。
+</p>
+</section>
+
+<section>
+
+<h1>リトライする</h1>
+
+<ul>
+<li>ネットワークの状況がわるい所で 0.01% ぐらいの確率でリトライが発生</li>
+<li>ただし、そのほとんどすべてが 1回のリトライで成功</li>
+<li>3回以上リトライが走るケースは現状ではない</li>
+</ul>
+
+<p>
+ので、3回ぐらいのリトライで実用上は問題ないんじゃないかと思います
+</p>
+</section>
+
+<section>
+
+<h1>リトライする</h1>
+
+<p>
+ちなみに get の場合は、本当にデータがない場合も undef が返ってくるので判定できませんが、
+<br />おんなじようにリトライしといてもいいんじゃないかと思います。
+</p>
+<p>
+というかしてます。
+</p>
+</section>
+
+<section>
+
+<h1>まとめ</h1>
+
+<ul>
+<li>永続接続できるならするべし</li>
+<li>set / delete 漏れを無くしたいならリトライが有効</li>
+<li><del>いいスイッチを買う</del></li>
+</ul>
+
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>キャッシュを<br /><span style="color: red">worker</span>で作成</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>キャッシュをworkerで作成</h1>
+
+<p>
+Mobage はいろんなコンポーネントがあって、いろんな人が見るキャッシュとかがあります
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュをworkerで作成</h1>
+
+<p>
+で、その人達がみんなで「キャッシュなかったら生成するー」とかを書くのはめんどいよねってことがあるので、キャッシュ生成専用の worker を立てやってるところがあります。
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュをworkerで作成</h1>
+
+<p>
+負荷対策の本筋とは直接は関係ありませんが、この仕組があることで、あとあといろいろ便利だったのでちょろっと紹介します。
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュの作成</h1>
+
+<ul>
+<li>on the fly のはなし</li>
+<li>worker や batch 処理のはなし</li>
+</ul>
+
+<p>
+キャッシュ生成はだいたいこの二種類
+</p>
+</section>
+
+<section>
+
+<h1>on the fly で作る</h1>
+
+<p>
+アプリ側でキャッシュがなかったらDBとかから引いてきて作るのこと
+</p>
+<p>
+以下のような method を生やしておくと便利
+</p>
+<pre>
+sub get_fallback {
+    my ($self, $key, $callback, $expires) = @_;
+    my $value = $self-&gt;get($key);
+    return $value if defined $value;
+    unless (defined $value) {
+        $res = $callback-&gt;($key);
+    }
+    $self-&gt;set($key, $value, $expires) if defined $value;
+    return $value;
+}
+</pre>
+
+<pre>
+# 使用例
+my $value = $memd-&gt;get_fallback($key, sub {
+    # キャッシュにヒットしなかった場合の処理
+}, $expires);
+</pre>
+
+</section>
+
+<section>
+
+<h1>on the fly で作る</h1>
+
+<p>
+あとは普通のことなので省略
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<ul>
+<li>サービスがグローバルに持つデータ</li>
+<ul>
+<li>config とか</li>
+</ul>
+<li>数が少ない</li>
+<li>いろんな人が見る</li>
+<li>数秒なら遅れても問題ない</li>
+</ul>
+
+<p>
+というようなデータを worker で定期的に作成 + 変更があった場合は enqueue することで更新する
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<!-- raw html start -->
+<div class="center">
+<!-- raw html end -->
+<p>
+<img src="static/img/cache_from_worker.png" alt="static/img/cache_from_worker.png" title="static/img/cache_from_worker.png" />
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+</p>
+<ul>
+<li>メッセージキューとして、Q4M を利用</li>
+<li>定期的に enqueue するバッチが動いている</li>
+<ul>
+<li>数秒から1分おきぐらい</li>
+</ul>
+<li>worker がキューを処理して、キャッシュを作成</li>
+<li>アプリからは enqueue だけすればOK</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<h2>メリット</h2>
+
+<ul>
+<li>キャッシュ更新のロジックをアプリで書く必要がなくなる</li>
+<ul>
+<li>復数DB参照してマージするなどめんどいやつとか</li>
+</ul>
+<li>アプリ側では常にキャッシュがあることが期待できる</li>
+<ul>
+<li>とはいえ fallback 処理を書いておくに越したことはない</li>
+</ul>
+<li>△キャッシュを物理的に別のサーバーへ移動するのがやりやすい</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<h2>デメリット</h2>
+
+<ul>
+<li>リアルタイム性が損なわれる</li>
+<li>新しいミドルウェアが増える</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<p>
+Mobage では、各ゲームの情報なんかを worker で生成してます。
+</p>
+</section>
+
+<section>
+
+<h1>キャッシュを worker で作成</h1>
+
+<p>
+あとでこの仕組みを色々と使った例を紹介します。
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>第一部・<span style="color: red">完</span></strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>第二部</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 200%"><strong>memcached への<br />トラフィックを<span style="color: red">削減</span>する</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>key の偏り</h1>
+
+<p>
+先ほど例に上げた、config を memcached に入れる運用はよくやっていると思いますが、
+<br />よく利用される key へのアクセスが偏ってしまうという問題があります。
+</p>
+</section>
+
+<section>
+
+<h1>key の偏り</h1>
+
+<p>
+例えば、key の偏りをなくすために、以下のように、key に suffix をつけて保存先を分散する方法があります。
+</p>
+<pre>
+sub set {
+    my ($self, $key, $value, $expires) = @_;
+    for my $i (1..30 ) {
+        $memd-&gt;set(&quot;$key:$i&quot;, $value, $expires);
+    }
+}
+
+sub get {
+    my ($self, $key) = @_;
+    $memd-&gt;get(sprintf &#39;%s:%s&#39;, $key, int(rand(30)+1));
+}
+</pre>
+
+</section>
+
+<section>
+
+<h1>key を変えて分散する方法の問題点</h1>
+
+<ul>
+<li>先ほどの例だと、更新のたびに30回書き込みが発生する</li>
+<ul>
+<li>さらに確実に更新するためにリトライの必要がある</li>
+</ul>
+<li>最大でもトラフィックが 1/30 にしかならない</li>
+<ul>
+<li>memcached が 30台以上あり、かつ全て別のサーバーへ運良く分散された場合</li>
+</ul>
+</ul>
+
+<p>
+わりと効率が悪いです
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>そこで、全部のアプリサーバーに<br />memcached を立てることにしました</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+<del>すいません、常識かもしれませんが、今年までローカルに立ってなかったんです...</del>
+</p>
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<h2>メリット</h2>
+
+<ul>
+<li>unix domain socket が使える</li>
+<li>永続接続ができる</li>
+<ul>
+<li>たかだかプロセス数分のコネクションしか貼らない</li>
+</ul>
+<li>トラフィックが 1 / (サーバー台数 x プロセス数) ぐらいに</li>
+<ul>
+<li>全てのサーバーの memcached にデータがある場合</li>
+</ul>
+</ul>
+
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<!-- raw html start -->
+<div class="center">
+<!-- raw html end -->
+<p>
+<img src="static/img/local_memcached.png" alt="static/img/local_memcached.png" title="static/img/local_memcached.png" />
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+</p>
+<ol>
+<li>まず、アプリはローカルから get する</li>
+<li>ローカルにヒットしなかったらリモートから get する</li>
+<li>リモートから引いてきたデータをローカルに set する</li>
+</ol>
+
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<p>
+ローカル memcached を利用することで、リモートの memcached へのトラフィックが激減し、さらにローカルに永続接続することで、スループットも向上しました。
+</p>
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<h2>デメリット</h2>
+
+<ul>
+<li>キャッシュの不整合が起きる場合がある</li>
+<li>アプリサーバーの CPU とメモリを食う</li>
+<li>死活監視の項目が一個増える</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<p>
+とりわけ重要なのは、キャッシュの不整合が起きる可能性。
+<br />これはキャッシュの時間を極端に短くすることで対応。
+<br />数秒とか。それだけでもかなりの効果あり。
+</p>
+<p>
+CPU 使用率は実際にはほとんど上がらない。
+</p>
+</section>
+
+<section>
+
+<h1>ローカルに memcached を立てる</h1>
+
+<p>
+「いまんところ使わないけど、とりあえずアプリサーバーに memcached 立てておくかー」ぐらいのゆるふわな感じでやっとくと、後々便利かもしれません。
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>はい</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>大体半分ぐらい来ました</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>って書いとくといいらしいです</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>DNS のキャッシュ</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>DNS のキャッシュ</h1>
+
+<ul>
+<li>内部向けの DNS のキャッシュ</li>
+<li>外向けの DNS のキャッシュ</li>
+</ul>
+
+<p>
+の2種類のお話
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>内部向け DNS のキャッシュ</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+きのう @riywo さんが話して若干被ってるかもしれませんが、僕の方が圧倒的に早くスライドを書き終えていたので、パクりはあちらです。
+</p>
+</section>
+
+<section>
+
+<p>
+あと、オープンプラットフォームは実装が、怪盗なんたらとかとは全く別なので、違う方法でやってるので多分へいき。
+</p>
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<ul>
+<li>Mobage では伝統的に、DB のスレーブへの負荷分散に MyDNS の重み付けされたラウンドロビンを利用</li>
+<li>LVS -> MyDNS という風にして負荷分散している</li>
+<ul>
+<li>トラフィックが増えすぎてパケロスが多発するように</li>
+<li>パケロスするとデフォルトで 5秒まってしまう！</li>
+<ul>
+<li>/etc/resolv.conf で timeout と retry を調整できるが...</li>
+</ul>
+</ul>
+</ul>
+
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+ちなみに、LVS とか MyDNS のいいところは
+</p>
+<ul>
+<li>設定が一元管理できる</li>
+<li>salve が壊れた時なんかに即時切り離しができる</li>
+<li>逆に slave の追加なんかも容易</li>
+</ul>
+
+<p>
+基本的に、アプリの改修なくかつ無停止に変更できるのがいい
+</p>
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+fujiwara 組長のが昨日はなしていた、HAproxy とかは再起動が必要なので、こんかいのケースには使えない
+</p>
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+しかし、既存の負荷分散だと厳しくなってきたので、なんとかしないといけない。
+</p>
+<p>
+真っ先に思いたのは dnscache や、unbound などの DNS キャッシュをローカルに立てること
+</p>
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+しかし、どちらも重み付けされたラウンドロビンができそうにない
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>＼(^o^)／</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+<span style="color: red">結局アプリ側で自力で DB への負荷分散をやることに</span>
+</p>
+</section>
+
+<section>
+
+<p>
+<del>イケてない話ばかりですいません</del>
+</p>
+</section>
+
+<section>
+
+<h1>実装</h1>
+
+<ol>
+<li>アプリで必要な DNS の一覧を取得する</li>
+<li>DNS に紐づいているエントリーと重みを MyDNS の DB から取得する</li>
+<li>fqdn を key にして memcached にぶっこむ</li>
+</ol>
+
+<p>
+というバッチを作成し、数秒おきに実行する
+</p>
+</section>
+
+<section>
+
+<h1>実装</h1>
+
+<ol>
+<li>アプリは memcached から対象のエントリーを取得する</li>
+<ol>
+<li>この時に、ローカルの memcached にも set しておく</li>
+<li>更に、プロセス内にも同じキャッシュを持っておく</li>
+</ol>
+<li>拙作、<a href="http://search.cpan.org/dist/Data-WeightedRoundRobin/lib/Data/WeightedRoundRobin.pm">Data::WeightedRoundRobin</a> で重み付けのラウンドロビンをして IP を取得</li>
+<li>対象の DB へアクセス！</li>
+</ol>
+
+</section>
+
+<section>
+
+<h1>実装</h1>
+
+<!-- raw html start -->
+<div class="center">
+<!-- raw html end -->
+<p>
+<img src="static/img/internal_dns_cache.png" alt="static/img/internal_dns_cache.png" title="static/img/internal_dns_cache.png" />
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+</p>
+<p>
+図にするとこんな感じ
+</p>
+</section>
+
+
+<section>
+
+<h1>実装</h1>
+
+<p>
+既存のコードを以下のような感じに書き換える
+</p>
+<pre>
+package MyAPP::DB;
+use DBI;
+use Data::WeightedRoundRobin;
+
+sub connect {
+    my ($self, $connect_info) = @_;
+    my ($scheme, $driver, $driver_dsn) =
+        (DBI-&gt;parse_dsn($connect_info-&gt;{dsn}))[0,1,4];
+    my $driver_hash = {
+        map { split &#39;=&#39;, $_, 2 } split &#39;;&#39;, $driver_dsn
+    };
+    # fqdn を ip に書き換える
+    my $ip = $self-&gt;resolve($driver_hash-&gt;{host});
+    $driver_hash-&gt;{host} = $ip;
+
+    # dsn を再構築
+    $driver_dsn = join &#39;;&#39;, map {
+        &quot;$_=$driver_hash-&gt;{$_}&quot;
+    } keys %$driver_hash;
+    $connect_info-&gt;{dsn} =
+        sprintf &#39;%s:%s:%s&#39;, $scheme, $driver, $driver_dsn;
+
+    # 置き換えられた ip へ接続
+    DBI-&gt;connect(@$connect_info{qw/dsn user password attr/});
+}
+
+sub resolve {
+    my ($self, $fqdn) = @_;
+    do {
+        $self-&gt;{wrr}{$fqdn} ||= Data::WeightedRoundRobin-&gt;new(
+            $self-&gt;fetch_dns_entry($fqdn)
+        );
+    }-&gt;next || $fqdn; # 取れなかった場合、fqdn を返す
+}
+
+sub fetch_dns_entry {
+    my ($self, $fqdn) = @_;
+    # 実際には プロセス内キャッシュ -&gt; ローカルキャッシュ
+    # -&gt; リモートキャッシュの順にフォールバックする
+    my $entry = $cache-&gt;get($fqdn);
+}
+</pre>
+
+</section>
+
+<section class="center">
+
+<h1>効果</h1>
+
+<p>
+<p style="font-size: 130%"><strong>PV x 数回発生していた<br />DNS ルックアップが <span style="color: red">0</span> になりました</strong></p>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>☺</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<p>
+簡単にやってることをまとめると
+</p>
+<ol>
+<li>何かしらの key を決めて</li>
+<li>DB などのストレージにエントリーの一覧を記録しておき</li>
+<li>そいつのキャッシュを予め作っておいて</li>
+<li>アプリでキャッシュを取得して</li>
+<li>対象の ip にアクセスする</li>
+</ol>
+
+<p>
+っていうだけです。簡単ですね。
+</p>
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<ul>
+<li>重み付けをしなくていいような場合は、適当に rand() すればいいだけ。</li>
+<li>やってることは単純なので、割りとどんな環境でも応用が効くんじゃないかと思います。</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<h2>デメリット</h2>
+
+<ul>
+<li>サーバーの切り離しなどが即時反映されない</li>
+<li>アプリの改修がちょいめんどい</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>内部向けのDNSのキャッシュ</h1>
+
+<ul>
+<li>とはいえ、MyDNS の切り離しも全部に浸透するまでに若干にディレイはある。</li>
+<li>キャッシュのライフサイクルを秒単位にすることで、問題を最小限に。</li>
+<li>この slave 繋がらなかったら別の人につなぐーみたいなのは割りとアプリ側でやってるのでそこまでインパクトはない</li>
+</ul>
+
+</section>
+
+<section>
+
+<p>
+<del>普通は LVS で事足りるんですが</del>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>外向けのDNSのキャッシュ</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+今まで、内部トラフィックの話をしてきましたが、
+<br />Mobage オープンプラットフォームには、Gadget Sever という docomo ゲートウェイみたいなサーバーがあります。
+</p>
+<p>
+この人は、外部のサーバーに対してリクエストを行います。
+</p>
+</section>
+
+<section>
+
+<h1>1分で分かる Gadget Server</h1>
+
+<!-- raw html start -->
+<div class="center">
+<!-- raw html end -->
+<p>
+<img src="static/img/gadget_server.png" alt="static/img/gadget_server.png" title="static/img/gadget_server.png" />
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>Gadget Server -> Game Server のところで DNS ルックアップが発生する</li>
+<li>これも毎回引くのは厳しい</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>HTTPクライアントに LWP を使っていたので、全然 DNS 周りに手がつけられない</li>
+<li>またも dnscache とか unbound かと思うけど運用めんどい</li>
+</ul>
+
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>そうだ、<span style="color: red">Furl</span> にしよう！</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+<del>それが悲劇の始まりであった...</del>
+</p>
+</section>
+
+<section>
+
+<p>
+<del>いっぱいパッチ送ったよ...</del>
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>Server to Server なので、愚直に TTL 以内のキャッシュをすればよい</li>
+<li>複数のレコードが返ってくる場合は、ラウンドロビンをする必要がある</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>Server to Server なので、愚直に TTL 以内のキャッシュをすればよい</li>
+<li>複数のレコードが返ってくる場合は、ラウンドロビンをする必要がある</li>
+</ul>
+
+<p>
+DNS のキャッシュは Net::DNS::Lite + Cache::LRU を使えば良い感じに
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<p>
+以下のようにやるだけ
+</p>
+<pre>
+use Furl;
+use Net::DNS::Lite;
+use Cache::LRU;
+
+# Net::DNS::Lite のキャッシュを有効に
+$Net::DNS::Lite::CACHE = Cache::LRU-&gt;new(size =&gt; 1024);
+
+my $furl = Furl-&gt;new(
+    # DNS ルックアップに Net::DNS::Lite を使う
+    inet_aton =&gt; \&amp;Net::DNS::Lite::inet_aton, 
+);
+
+...
+</pre>
+
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<p>
+これで問題ないかに見えたが、キャッシュのヒット率が悪いことが判明
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>DNS がキャッシュされるのは、<strong><span style="color: red">プロセスごと</span></strong></li>
+<li>つまりヒット率は、1 / (サーバー x プロセス) </li>
+<li>キャッシュが行き渡ったときには、すでに古いやつが expire され始めている</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする</h1>
+
+<ul>
+<li>DNS がキャッシュされるのは、<strong><span style="color: red">プロセスごと</span></strong></li>
+<li>つまりヒット率は、1 / (サーバー x プロセス) </li>
+<li>キャッシュが行き渡ったときには、すでに古いやつが expire され始めている</li>
+</ul>
+
+<p>
+とはいえ、DNS のルックアップは大幅に減った
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>だが、まだいける！</strong></p>
+
+</div></section>
+
+<section>
+
+<h1>外部DNSをキャッシュする 2.0</h1>
+
+<!-- raw html start -->
+<div class="center">
+<!-- raw html end -->
+<p>
+<img src="static/img/foreign_dns_cache.png" alt="static/img/foreign_dns_cache.png" title="static/img/foreign_dns_cache.png" />
+<!-- raw html start -->
+</div>
+<!-- raw html end -->
+</p>
+<ol>
+<li>キャッシュが全くない場合に、DNS を引く</li>
+<li>リモートとローカルの memcached にぶっこむ</li>
+<ul>
+<li>ついでに、TTL 内であればキャッシュしていいので、プロセス内にもキャッシュしておく(が、ヒット率は低い)</li>
+</ul>
+<li>アプリ側で適当に rand() して実サーバーへリクエスト</li>
+</ol>
+
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする 2.0</h1>
+
+<p>
+次回からは、
+</p>
+<pre>
+プロセス内キャッシュ -&gt; ローカル -&gt; リモート -&gt; DNS ルックアップ
+</pre>
+
+<p>
+というかんじにフォールバック。
+</p>
+<p>
+大体、DNS のルックアップが 1 / (サーバー x プロセス) ぐらいに。
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする 2.0</h1>
+
+<p>
+実装は以下のような感じ
+</p>
+<pre>
+package MyApp::UserAgent;
+
+use Furl;
+use Net::DNS::Lite;
+use Socket;
+use List::Util qw(min);
+
+my $NET_DNS_LITE = Net::DNS::Lite-&gt;new;
+my $RR_TTL_IDX     = 3;
+my $RR_ADDRESS_IDX = 4;
+
+sub request {
+    my ($self, $req) = @_;
+    my $furl = Furl-&gt;new(
+        inet_aton =&gt; sub {
+            my ($host, $timeout) = @_;
+            return $self-&gt;my_inet_aton($host, $timeout);
+        },
+    );
+}
+
+sub my_inet_aton {
+    my ($self, $host, $timeout) = @_;
+    my $iaddr;
+
+    my $ip_list = $self-&gt;fetch_ip_list($host, $timeout);
+    while (@$ip_list) {
+        # ランダムに ip を選択
+        my $idx = int rand @$ip_list;
+        $iaddr = Socket::inet_aton($ip_list-&gt;[$idx]);    
+        last if defined $iaddr;
+        splice @$ip_list, $idx, 1; # 繋がらなかった人を削除
+    }
+
+    return $iaddr;
+}
+
+sub fetch_ip_list {
+    my ($self, $host, $timeout) = @_;
+
+    # プロセス内キャッシュ -&gt; ローカル -&gt; リモートにフォールバック
+    my ($ip_list, $ttl) = $self-&gt;cache-&gt;get($host);
+    unless ($ip_list) {
+        # A レコードを引く
+        for my $rr (
+            $NET_DNS_LITE-&gt;resolve($host, &#39;a&#39;, timeout =&gt; $timeout)
+        ) {
+            $ttl = min $ttl, $rr-&gt;{RR_TTL_IDX];
+            push @$ip_list, $rr-&gt;[$RR_ADDRESS_IDX];
+        }
+        # キャッシュの生成
+        $self-&gt;cache-&gt;set($ip_list, $ttl);
+    }
+    retrun $ip_list;
+}
+</pre>
+
+</section>
+
+
+<section>
+
+<h1>外部DNSをキャッシュする 2.0</h1>
+
+<p>
+本当はもっと色々やってますが、だいたいこんな感じで、外部のDNS をキャシュ
+</p>
+</section>
+
+<section>
+
+<h1>外部DNSをキャッシュする 2.0</h1>
+
+<p>
+<span style="color: red">する予定です</span>
+</p>
+</section>
+
+<section>
+
+<p>
+<del>すいません、リリース間に合いませんでした</del>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>第二部・<span style="color: red">完</span></strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>おまけ</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>例えば、<span style="color: red">キャッシュ</span>を使わない</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>はい</strong></p>
+
+</div></section>
+
+<section>
+
+<p>
+<del>いままでキャッシュの話してきて、なにいってんのこいつ？</del>
+</p>
+</section>
+
+<section>
+
+<h1>例えば、キャッシュを使わない</h1>
+
+<p>
+キャッシュが必要とはいえ...
+</p>
+<ul>
+<li>memcached とか使うと、アプリが冗長になってめんどい</li>
+<li>ローカルキャッシュとか使うと、整合性とかめんどい</li>
+<li>DB がもっと速ければいいじゃない </li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>例えば、キャッシュを使わない</h1>
+
+<ul>
+<li>MySQL には、HandlerSocket があるじゃないか！</li>
+<li>MySQL 5.6 からは memcached プロトコル対応！</li>
+</ul>
+
+</section>
+
+
+<section>
+
+<h1>例えば、キャッシュを使わない</h1>
+
+<p>
+MySQL 5.6 の memcached プロトコルについてはよくわからないので省略
+</p>
+</section>
+
+<section>
+
+<h1>HandlerSocket について</h1>
+
+<ul>
+<li>MySQL の NoSQL プラグイン</li>
+<li>速い (memcached より速い場合も)</li>
+<li>max_connection が実質無制限 (65535 とか)</li>
+<ul>
+<li>持続接続できる</li>
+<li>サーバー100台でプロセス50だとしても5000コネクション</li>
+</ul>
+<li>SQL よりもコンパクトなプロトコル</li>
+<ul>
+<li>トラフィックの削減</li>
+</ul>
+</ul>
+
+</section>
+
+<section>
+
+<h1>HandlerSocket について</h1>
+
+<p>
+詳しくは
+</p>
+<ul>
+<li><a href="http://www.slideshare.net/akirahiguchi/handlersocket-etc-20110906">http://www.slideshare.net/akirahiguchi/handlersocket-etc-20110906</a></li>
+<li><a href="http://yoshinorimatsunobu.blogspot.com/2010/10/using-mysql-as-nosql-story-for.html">http://yoshinorimatsunobu.blogspot.com/2010/10/using-mysql-as-nosql-story-for.html</a></li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>HandlerSocket について</h1>
+
+<p>
+置き換えやすいタイプのキャッシュ
+</p>
+<ul>
+<li>単純なクエリーのキャッシュ</li>
+<li>数が多い</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>HandlerSocket について</h1>
+
+<p>
+置き換えやすいタイプのキャッシュ
+</p>
+<ul>
+<li>単純なクエリーのキャッシュ</li>
+<li>数が多い</li>
+</ul>
+
+<hr />
+
+<ul>
+<li>たとえば、user データのキャッシュなど</li>
+<li>常にDBから引くので煩雑なキャッシュの更新などなくなる</li>
+</ul>
+
+</section>
+
+<section>
+
+<h1>HandlerSocket について</h1>
+
+<p>
+とはいえ、HandlerSocket は
+</p>
+<ul>
+<li>index を使った取得しかできない</li>
+<li>DB なのでスキーマを定義する必要がある</li>
+<li>memcached のように expire などは無いので、自分でお掃除する必要がある</li>
+</ul>
+
+<p>
+とかあるので、当然ながら全ての memcached を置き換えることはできませんが、マッチする所では強力ですね。
+</p>
+</section>
+
+
+<section>
+
+<p>
+<del>まぁオープンプラットフォームはつかってないんですけどね...</del>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>今日の<span style="color: red">まとめ</span></strong></p>
+
+</div></section>
+
+<section>
+
+<h1>まとめ</h1>
+
+<ul>
+<li>キャッシュの更新はリトライすべし</li>
+<li>ローカルに1次キャッシュを立てるとトラフィック激減する</li>
+<li>内部向けのDNSキャッシュとかは超絶バッドノウハウですね...</li>
+<li>外部DNSはTTL内でキャッシュすべし</li>
+<li>単純なケースであれば、HandlerSocket もあり</li>
+</ul>
+
+</section>
+
+<section>
+
+<p>
+<del>トラフィックが増えてくると、よくわからないところでよくわからないキャッシュをいっぱい作らなきゃいけなくて大変なので、誰か助けてください。</del>
+</p>
+</section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>俺達の戦いは<br />まだ始まったばかりだぜ！</strong></p>
+
+</div></section>
+
+<section class="center"><div style="position: relative; top: 20%">
+
+<p style="font-size: 150%"><strong>ご清聴ありがとうございました</strong></p>
+
+</div></section>
+
+
+<div id="dummy"></div>
+<div id="date"></div>
+<div id="page"></div>
+<div id="help">
+<p>j or &rarr;: next</p>
+<p>k or &larr;: prev</p>
+<p>h or &uarr;: list</p>
+<p>l or &darr;: return</p>
+<p>o or &crarr;: open</p>
+<p>? or /: toggle this help</p>
+</div>
+<script type="text/javascript" src="static/js/slide.js"></script>
+<script type="text/javascript" src="http://google-code-prettify.googlecode.com/svn/trunk/src/prettify.js"></script>
+<script type="text/javascript" src="static/js/prettify.js"></script>
+</body>
+<html>
